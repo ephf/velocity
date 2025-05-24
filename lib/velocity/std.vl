@@ -1,0 +1,6 @@
+struct str {
+    data: &char,
+    size: usize,
+}
+
+fn print(x: str) __external;
