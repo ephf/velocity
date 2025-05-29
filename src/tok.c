@@ -3,21 +3,18 @@
 
 #include "lib.c"
 
-typedef struct {
-    int id, len;
-    char* data;
-} str;
-
-#define constr(x) ((str) { 0, sizeof(x) - 1, (char*) x })
-
-int streq(str a, str b) {
-    return a.len == b.len && !strncmp(a.data, b.data, a.len);
-}
-
 #define numc(x) ((x) >= '0' && (x) <= '9')
 #define alpnumc(x) ((x) >= 'a' && (x) <= 'z' || (x) >= 'A' && (x) <= 'Z' || (x) == '_' || numc(x))
 
 char lookup[128] = { 0 };
+char lookup_chars[] = "!%&*+-/<=>?^|~";
+
+__attribute__ ((constructor))
+void init_lookup() {
+    for(char i = 0; i < sizeof(lookup_chars) - 1; i++) {
+        lookup[lookup_chars[i]] = i;
+    }
+}
 
 str next(str* p) {
     str n = *p;

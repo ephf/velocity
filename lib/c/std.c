@@ -2,6 +2,7 @@
 #define VELOCITY_C_STD
 
 #include <stdio.h>
+#include <stdlib.h>
 
 struct str {
     char* data;

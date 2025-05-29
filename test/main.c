@@ -1,7 +1,7 @@
 #include "../lib/c/std.c"
 // <velocity test v0>
 
-int main() {
-    print((struct str) { .data = "Hello World", .size = 11, });
+typeof(int) main() {
+    print((struct str) { .size = 11, .data = "Hello World", });
     return 0;
 }

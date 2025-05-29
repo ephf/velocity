@@ -1,25 +1,46 @@
+#ifndef NODE_C
+#define NODE_C
+
 #include "../tok.c"
 #include "../lib.c"
 
 typedef struct Node {
     void (*prototype)(struct Node, FILE*);
     union {
-        struct Node* children;
+        struct {
+            Vec(struct Node) children;
+            struct Context {
+                Map(struct Node) variables;
+                Map(struct Node) types;
+                struct Node* current_function;
+            } context;
+        } body;
+        
         struct Node* child;
 
         struct {
-            int meta;
+            int type_meta;
             union {
-                const char* c_type;
-                struct Node* declaration;
+                struct {
+                    union {
+                        const char* c_type;
+                        struct Node* declaration;
+                    };
+                    struct Node* child;
+                } base_type;
+
+                struct {
+                    struct Node* base;
+                    Vec(struct Node*) variadic_arguments;
+                    Vec(char) modifiers;
+                } modified_type;
             };
-            struct Node* child;
-        } defined_type;
+        };
 
         struct {
             int meta;
-            struct Node* signature;
-            str* argument_names;
+            Vec(struct Node*) signature;
+            Vec(str) argument_names;
             str identifier;
             struct Node* body;
         } function_declaration;
@@ -32,8 +53,7 @@ typedef struct Node {
 
         struct {
             str identifier;
-            str* keys;
-            struct Node* types;
+            Map(struct Node*) body;
         } structure_declaration;
 
         struct {
@@ -77,12 +97,11 @@ typedef struct Node {
 
                 struct {
                     struct Node* function;
-                    struct Node* arguments;
+                    Vec(struct Node) arguments;
                 } function_call;
 
                 struct {
-                    str* keys;
-                    struct Node* values;
+                    Map(struct Node) body;
                 } structure;
             };
         };
@@ -96,14 +115,15 @@ enum {
     tIsNumeric = 1 << 0,
 
     fExternal = 1 << 0,
+
+    mPointer =  1 << 0,
+    mArray =    1 << 1,
 };
-
-str* type_names = 0;
-Node* types = 0;
-
-str* var_names = 0;
-Node* vars;
 
 char (*indent)[4] = 0;
 
-void Ignore(Node node, FILE* file) {}
+typedef struct Context Context;
+
+Vec(Context) stack = 0;
+
+#endif
