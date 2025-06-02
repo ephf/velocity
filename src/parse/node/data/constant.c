@@ -14,18 +14,18 @@ void Constant(Node node, FILE* file) {
 
 Node numeric_type = {
     .prototype = &Auto,
-    .type_meta = tIsNumeric,
+    .type_meta = tIsNumeric | tAutoConst,
 };
 
-Node parse_number_constant(str token) {
-    return (Node) {
+Node* parse_number_constant(str token) {
+    return Box((Node) {
         .prototype = &Constant,
         .type = &numeric_type,
         .constant = {
             .type = cNumber,
             .number = strtol(token.data, 0, 0),
         },
-    };
+    });
 }
 
 Node str_declaration = {
@@ -42,29 +42,29 @@ Node str_type = {
     },
 };
 
-Node parse_string_constant(str token) {
-    return (Node) {
+Node* parse_string_constant(str token) {
+    return Box((Node) {
         .prototype = &Structure,
         .type = &str_type,
         .structure = {
-            .body = map(str, Node, {
-                { constr("data"), {
+            .body = map(str, Node*, {
+                { constr("data"), Box((Node) {
                     .prototype = &Constant,
                     .constant = {
                         .type = cString,
                         .string = token,
                     },
-                } },
-                { constr("size"), {
+                }) },
+                { constr("size"), Box((Node) {
                     .prototype = &Constant,
                     .constant = {
                         .type = cNumber,
                         .number = token.len - 2,
                     },
-                } },
+                }) },
             }),
         },
-    };
+    });
 }
 
 #endif

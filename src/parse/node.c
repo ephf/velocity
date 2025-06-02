@@ -8,11 +8,12 @@ typedef struct Node {
     void (*prototype)(struct Node, FILE*);
     union {
         struct {
-            Vec(struct Node) children;
+            Vec(struct Node*) children;
             struct Context {
-                Map(struct Node) variables;
-                Map(struct Node) types;
+                Map(struct Node*) variables;
+                Map(struct Node*) types;
                 struct Node* current_function;
+                struct Node* namespace;
             } context;
         } body;
         
@@ -21,17 +22,22 @@ typedef struct Node {
         struct {
             int type_meta;
             union {
-                struct {
-                    union {
-                        const char* c_type;
-                        struct Node* declaration;
-                    };
-                    struct Node* child;
+                union {
+                    str c_type;
+                    struct Node* declaration;
+                    struct {
+                        Vec(struct Node*)* generics;
+                        int index;
+                    } generic;
+                    struct {
+                        struct Node* parent;
+                        struct Node* child;
+                    } generic_wrapper;
                 } base_type;
 
                 struct {
                     struct Node* base;
-                    Vec(struct Node*) variadic_arguments;
+                    Vec(struct Node*) type_arguments;
                     Vec(char) modifiers;
                 } modified_type;
             };
@@ -43,6 +49,8 @@ typedef struct Node {
             Vec(str) argument_names;
             str identifier;
             struct Node* body;
+            Vec(struct Node*) generics;
+            Map(int) monomorphized_functions;
         } function_declaration;
 
         struct {
@@ -64,6 +72,15 @@ typedef struct Node {
             struct Node* type;
             union {
                 struct {
+                    Vec(struct Node*) generics;
+                    Vec(struct Node*)* generics_override;
+                    str identifier;
+                    Vec(str*) identifier_overrides;
+                    struct Node* child;
+                } generic_wrapper;
+
+                struct {
+                    int meta;
                     str identifier;
                 } variable;
 
@@ -97,12 +114,17 @@ typedef struct Node {
 
                 struct {
                     struct Node* function;
-                    Vec(struct Node) arguments;
+                    Vec(struct Node*) arguments;
                 } function_call;
 
                 struct {
-                    Map(struct Node) body;
+                    Map(struct Node*) body;
                 } structure;
+
+                struct {
+                    str identifier;
+                    struct Node* body;
+                } namespace;
             };
         };
     };
@@ -112,15 +134,18 @@ enum {
     cNumber = 0,
     cString,
 
-    tIsNumeric = 1 << 0,
+    tIsNumeric  = 1 << 0,
+    tHidden     = 1 << 1,
+    tAutoConst  = 1 << 2,
 
-    fExternal = 1 << 0,
+    fExternal   = 1 << 0,
+    fGeneric    = 1 << 1,
 
-    mPointer =  1 << 0,
-    mArray =    1 << 1,
+    vHidden     = 1 << 0,
+
+    mPointer    = 1 << 0,
+    mArray      = 1 << 1,
 };
-
-char (*indent)[4] = 0;
 
 typedef struct Context Context;
 

@@ -27,15 +27,15 @@ void UnexpectedTokenError(Node node) {
         node.error.label.len, node.error.label.data);
 }
 
-Node unexpected_token(str token) {
-    return (Node) {
+Node* unexpected_token(str token) {
+    return Box((Node) {
         .prototype = &Error,
         .type = &error_type,
         .error = {
             .perror = &UnexpectedTokenError,
             .label = token,
         },
-    };
+    });
 }
 
 void CannotFindError(Node node) {
@@ -43,8 +43,8 @@ void CannotFindError(Node node) {
         node.error.cannot_find, node.error.label.len, node.error.label.data);
 }
 
-Node cannot_find(str token, char* cannot_find) {
-    return (Node) {
+Node* cannot_find(str token, char* cannot_find) {
+    return Box((Node) {
         .prototype = &Error,
         .type = &error_type,
         .error = {
@@ -52,7 +52,7 @@ Node cannot_find(str token, char* cannot_find) {
             .cannot_find = cannot_find,
             .label = token,
         },
-    };
+    });
 }
 
 void TypeMismatchError(Node node) {
@@ -63,8 +63,8 @@ void TypeMismatchError(Node node) {
     fprintf(stderr, "\33[0m\n");
 }
 
-Node type_mismatch(Node* a, Node* b) {
-    return (Node) {
+Node* type_mismatch(Node* a, Node* b) {
+    return Box((Node) {
         .prototype = &Error,
         .type = &error_type,
         .error = {
@@ -74,7 +74,7 @@ Node type_mismatch(Node* a, Node* b) {
                 .b = b,
             },
         },
-    };
+    });
 }
 
 #endif

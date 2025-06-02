@@ -3,7 +3,7 @@
 #include "node/data/constant.c"
 #include "node/data/variable.c"
 
-Node Literal(str* tokenizer) {
+Node* Literal(str* tokenizer) {
     str token = next(tokenizer);
 
     switch(token.id) {

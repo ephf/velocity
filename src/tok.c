@@ -7,7 +7,7 @@
 #define alpnumc(x) ((x) >= 'a' && (x) <= 'z' || (x) >= 'A' && (x) <= 'Z' || (x) == '_' || numc(x))
 
 char lookup[128] = { 0 };
-char lookup_chars[] = "!%&*+-/<=>?^|~";
+char lookup_chars[] = "!%&*+-/<=>?^|~:";
 
 __attribute__ ((constructor))
 void init_lookup() {

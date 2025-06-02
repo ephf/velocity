@@ -9,10 +9,11 @@ void Variable(Node node, FILE* file) {
         node.variable.identifier.len, node.variable.identifier.data);
 }
 
-Node find_variable(str token) {
+Node* find_variable(str token) {
     for(int i = len(stack); i--; ) {
-        Node* variable = get(stack[i].variables, token);
-        if(variable) return *variable;
+        Node** variable = get(stack[i].variables, token);
+        if(variable && !((*variable)->prototype == &Variable && (*variable)->variable.meta & vHidden))
+            return *variable;
     }
     return cannot_find(token, "variable");
 }
@@ -31,7 +32,7 @@ void VariableDeclaration(Node node, FILE* file) {
     fprintf(file, ";\n");
 }
 
-Node parse_variable_declaration(str* tokenizer) {
+Node* parse_variable_declaration(str* tokenizer) {
     next(tokenizer);
     
     str identifier = gimme(tokenizer, 'i');
@@ -44,47 +45,47 @@ Node parse_variable_declaration(str* tokenizer) {
         case '=': {
             next(tokenizer);
 
-            Node value = Expression(tokenizer, 100);
+            Node* value = Expression(tokenizer, 100);
             if(gimme(tokenizer, ';').id < 0) return unexpected_token(*tokenizer);
 
-            type_match(&type, value.type);
+            type_match(&type, value->type);
 
-            put(&stack[len(stack) - 1].variables, identifier, (Node) {
+            put(&stack[len(stack) - 1].variables, identifier, Box((Node) {
                 .prototype = &Variable,
                 .type = type,
                 .variable = {
                     .identifier = identifier,
                 },
-            });
+            }));
 
-            return (Node) {
+            return Box((Node) {
                 .prototype = &VariableDeclaration,
                 .variable_declaration = {
                     .type = type,
                     .identifier = identifier,
-                    .value = Box(value),
+                    .value = value,
                 },
-            };
+            });
         }
 
         case ';': {
             next(tokenizer);
 
-            put(&stack[len(stack) - 1].variables, identifier, (Node) {
+            put(&stack[len(stack) - 1].variables, identifier, Box((Node) {
                 .prototype = &Variable,
                 .type = type,
                 .variable = {
                     .identifier = identifier,
                 },
-            });
+            }));
 
-            return (Node) {
+            return Box((Node) {
                 .prototype = &VariableDeclaration,
                 .variable_declaration = {
                     .type = type,
                     .identifier = identifier,
                 },
-            };
+            });
         }
 
         default: return unexpected_token(*tokenizer);

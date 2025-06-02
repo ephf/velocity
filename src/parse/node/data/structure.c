@@ -5,12 +5,12 @@
 
 void Structure(Node node, FILE* file) {
     str identifier = node.type->base_type.declaration->structure_declaration.identifier;
-    Map(Node) body = node.structure.body;
+    Map(Node*) body = node.structure.body;
 
     fprintf(file, "(struct %.*s) { ", identifier.len, identifier.data);
-    entries(body, str key, Node value) {
+    entries(body, str key, Node* value) {
         fprintf(file, ".%.*s = ", key.len, key.data);
-        value.prototype(value, file);
+        value->prototype(*value, file);
         fprintf(file, ", ");
     }
     fprintf(file, "}");
@@ -33,7 +33,7 @@ void StructureDeclaration(Node node, FILE* file) {
     fprintf(file, "};\n");
 }
 
-Node parse_structure_declaration(str* tokenizer) {
+Node* parse_structure_declaration(str* tokenizer) {
     next(tokenizer);
 
     str identifier = gimme(tokenizer, 'i');
@@ -58,20 +58,26 @@ Node parse_structure_declaration(str* tokenizer) {
     }
     if(gimme(tokenizer, '}').id < 0) return unexpected_token(*tokenizer);
 
-    Node declaration = {
+    Node* declaration = Box((Node) {
         .prototype = &StructureDeclaration,
         .structure_declaration = {
             .identifier = identifier,
             .body = body,
         },
-    };
-
-    put(&stack[len(stack) - 1].types, identifier, (Node) {
-        .prototype = &Structure,
-        .base_type = {
-            .declaration = Box(declaration),
-        },
     });
+
+    if(stack[len(stack) - 1].namespace) {
+        declaration->structure_declaration.identifier =
+            strc(stack[len(stack) - 1].namespace->namespace.identifier, constr("__"), identifier);
+    }
+
+    put(&stack[len(stack) - 1].types, identifier, Box((Node) {
+        .prototype = &Structure,
+        .type_meta = stack[len(stack) - 1].namespace ? tHidden : 0,
+        .base_type = {
+            .declaration = declaration,
+        },
+    }));
 
     return declaration;
 }

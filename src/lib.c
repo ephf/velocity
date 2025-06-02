@@ -15,10 +15,19 @@ typedef struct {
 } str;
 
 #define constr(x) ((str) { 0, sizeof(x) - 1, (char*) x })
-
 int streq(str a, str b) {
     return a.len == b.len && !strncmp(a.data, b.data, a.len);
 }
+#define strc(x...) ({ \
+    str _s[] = { x }; \
+    int _l = 0; \
+    for(int i = 0; i < sizeof(_s) / sizeof(*_s); i++) _l += _s[i].len; \
+    str _c = { 0, _l, malloc(_l) }; \
+    for(int i = 0, j = 0; i < sizeof(_s) / sizeof(*_s); i++) { \
+        memcpy(_c.data + j, _s[i].data, _s[i].len); \
+        j += _s[i].len; \
+    } \
+    _c; })
 
 #define Vec(T) T*
 #define len(v) ((v) ? ((int*)(void*)(v))[-1] / sizeof(*(v)) : 0)
