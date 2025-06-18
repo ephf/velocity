@@ -1,5 +1,8 @@
+type int = external numeric int;
+type usize = external numeric size_t;
+
+fn echo<T>(x: T) -> T { return x; }
+
 fn main() -> int {
-    let box: &int = _c::malloc(4);
-    _c::realloc(box, 0);
-    return 0;
+    let x = echo<usize>(echo(5));
 }

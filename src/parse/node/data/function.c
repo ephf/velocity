@@ -5,6 +5,9 @@
 #include "variable.c"
 #include "../../include.h"
 
+#include "../symbol/identifier.c"
+#include "../symbol/generics.c"
+
 void FunctionType(Node node, FILE* file) {
     Vec(Node*) signature = node.base_type.declaration->function_declaration.signature;
     fprintf(file, "typeof(");
@@ -36,148 +39,89 @@ void FunctionDeclaration(Node node, FILE* file) {
 
     for(int i = 0; i < len(argument_names); i++) {
         signature[i + 1]->prototype(*signature[i + 1], file); 
-        fprintf(file, " %.*s%s", argument_names[i].len, argument_names[i].data,
+        fprintf(file, " %.*s%s", hoisted ? 0 : argument_names[i].len, argument_names[i].data,
             i >= len(argument_names) - 1 ? "" : ", ");
     }
 
-    fprintf(file, ") {\n");
+    fprintf(file, ")");
+    if(hoisted) {
+        fprintf(file, ";\n");
+        return;
+    }
+
+    fprintf(file, " {\n");
     body->prototype(*body, file);
     fprintf(file, "%.*s}\n", (int) len(indent) * 4, (char*)(void*) indent);
 }
 
-void GenericType(Node node, FILE* file) {
-    Node* type = (*node.base_type.generic.generics)[node.base_type.generic.index];
-    type->prototype(*type, file);
-}
-
-void organize_function_generics(str* tokenizer, Node* function) {
-    Node* declaration = function->type->base_type.declaration;
-    Vec(Node*) generics = declaration->function_declaration.generics;
-    declaration->function_declaration.generics = 0;
-    
-    for(int i = 0; i < len(generics); i++) {
-        push(&declaration->function_declaration.generics, Box((Node) { .prototype = &Auto }));
+Node* parse_function_call(Tokenizer* tokenizer, Node* left) {
+    if(left->prototype != &Variable || left->type->prototype != &FunctionType) {
+        push(&errors, type_mismatch(left->range, left, Box((Node) { &FunctionType, .base_type = {
+            .declaration = Box((Node) { &FunctionDeclaration, .function_declaration = {
+                .signature = vec(&void_type)
+            }}),
+        }})));
+        return Box((Node) { &Ignore });
     }
 
-    if(tokenizer->id == '<') {
-        next(tokenizer);
-        
-        int generic_index = 0;
-        // TODO: handle type arguments
-        // modify declaration generics
-        puts("not implemented");
-        exit(1);
-    }
-}
+    Node* declaration = left->type->base_type.declaration;
+    reset_generics(declaration);
 
-Node* function_declarations;
+    if(try_token(tokenizer, '<', 0)) resolve_type_arguments(tokenizer, &declaration->declaration_generics);
+    expect_token(tokenizer, '(');
 
-__attribute__ ((constructor))
-void _init_function_declarations() {
-    function_declarations = Box((Node) { .prototype = &BodyPrototype });
-}
-
-Node void_type = {
-    .prototype = &CType,
-    .base_type = {
-        .c_type = constr("void"),
-    },
-};
-
-Node* parse_function_call(str* tokenizer, Node* left) {
-    if(left->prototype != &Variable || left->type->prototype != &FunctionType)
-        return type_mismatch(left, Box((Node) {
-            .prototype = &FunctionType,
-            .base_type = {
-                .declaration = Box((Node) {
-                    .prototype = &FunctionDeclaration,
-                    .function_declaration = {
-                        .signature = vec(&void_type),
-                    },
-                }),
-            },
-        }));
-
-    next(tokenizer);
     Vec(Node*) arguments = 0;
-    Vec(Node*) signature = left->type->base_type.declaration->function_declaration.signature;
-    int signature_index = 1;
+    for(int i = 0; i < len(left->variable.bounded_function_arguments); i++)
+        push(&arguments, left->variable.bounded_function_arguments[i]);
 
-    while(tokenizer->id != ')') {
-        if(signature_index >= len(signature))
-            return type_mismatch(Expression(tokenizer, 100)->type, left->type);
+    Vec(Node*) signature = declaration->function_declaration.signature;
+    int signature_index = 1 + len(left->variable.bounded_function_arguments);
 
-        Node* argument = Expression(tokenizer, 100);
-        if(!type_match(&signature[signature_index++], argument->type))
-            push(&arguments, type_mismatch(signature[signature_index - 1], argument->type));
-        else push(&arguments, argument);
-
-        if(tokenizer->id == ',') next(tokenizer);
-        else break;
-    }
-    if(gimme(tokenizer, ')').id < 0) return unexpected_token(*tokenizer);
-
-    Vec(Node*) type_arguments = 0;
-    for(int i = 0; i < len(left->type->base_type.declaration->function_declaration.generics); i++) {
-        push(&type_arguments, 
-            left->type->base_type.declaration->function_declaration.generics[i]);
-    }
-
-    if(left->type->base_type.declaration->function_declaration.meta & fGeneric
-        && !(left->type->base_type.declaration->function_declaration.meta & fExternal)) {
-        Map(int)* monomorphized_functions = &left->type->base_type
-            .declaration->function_declaration.monomorphized_functions;
-        str key_string = { 0, len(type_arguments) * sizeof(void*), (void*) type_arguments };
-        Node* declaration = left->type->base_type.declaration;
-
-        if(!get(*monomorphized_functions, key_string)) {
-            put(monomorphized_functions, key_string, 1);
-
-            push(&function_declarations->body.children, Box((Node) {
-                .prototype = &GenericWrapper,
-                .generic_wrapper = {
-                    .child = declaration,
-                    .generics = type_arguments,
-                    .generics_override = &declaration->function_declaration.generics,
-                    .identifier = declaration->function_declaration.identifier,
-                    .identifier_overrides = vec(&declaration->function_declaration.identifier),
-                }
-            }));
+    while(tokenizer->current.type != ')') {
+        if(signature_index >= len(signature)) {
+            Node* expression = Expression(tokenizer, 100);
+            push(&errors, type_mismatch(expression->range, expression->type, &void_type));
+            continue;
         }
 
-        Node* generic_wrapper = Box((Node) {
-            .prototype = &GenericWrapper,
-            .type = signature[0],
-            .generic_wrapper = {
-                .child = Box((Node) {
-                    .prototype = &FunctionCall,
-                    .type = Box((Node) {
-                        .prototype = &GenericTypeWrapper,
-                        .base_type = {
-                            .generic_wrapper = {
-                                .child = signature[0],
-                            }
-                        }
-                    }),
-                    .function_call = {
-                        .function = left,
-                        .arguments = arguments,
-                    }
-                }),
-                .generics = type_arguments,
-                .generics_override = &declaration->function_declaration.generics,
-                .identifier = left->variable.identifier,
-                .identifier_overrides = vec(&left->variable.identifier,
-                    &declaration->function_declaration.identifier),
-            }
-        });
+        Node* argument = Expression(tokenizer, 100);
+        if(!type_match(&signature[signature_index++], argument->type)) {
+            Error mismatch = type_mismatch(argument->range, argument->type, signature[signature_index - 1]);
+            push(&mismatch.attachments, create_see_error((Error) {
+                .fault_point = signature[signature_index - 1]->range,
+                .perror = &SeeDeclaration,
+            }));
+            push(&errors, mismatch);
+        } else push(&arguments, argument);
 
-        generic_wrapper->generic_wrapper.child->type->base_type.generic_wrapper.parent = generic_wrapper;
-        return generic_wrapper;
+        if(!try_token(tokenizer, ',', 0) && tokenizer->current.type != ')') expect_token(tokenizer, ',');
+    }
+    TokenResult range_end = expect_token(tokenizer, ')');
+
+    if(declaration->attributes & aGeneric
+        && !(declaration->attributes & aExternal)) {
+        
+        Vec(Node*) wrapped_children = generic_wrap_declaration(tokenizer,
+            (struct GenericWrapper) {
+                .generics = declaration->declaration_generics,
+                .generics_override = &declaration->declaration_generics,
+                .identifier = declaration->function_declaration.identifier,
+                .identifier_overrides = vec(
+                    &left->variable.identifier,
+                    &declaration->function_declaration.identifier),
+            }, declaration,
+            vec(signature[0], Box((Node) { &FunctionCall, 0, stretch_token(left->range, range_end.token),
+                .type = signature[0], .function_call = {
+                    .function = left,
+                    .arguments = arguments,
+                }
+            })));
+
+        wrapped_children[1]->type = wrapped_children[0];
+        return wrapped_children[1];
     }
 
-    return Box((Node) {
-        .prototype = &FunctionCall,
+    return Box((Node) { &FunctionCall, 0, stretch_token(left->range, range_end.token),
         .type = signature[0],
         .function_call = {
             .function = left,
@@ -186,128 +130,106 @@ Node* parse_function_call(str* tokenizer, Node* left) {
     });
 }
 
-Node* parse_function_declaration(str* tokenizer) {
-    next(tokenizer);
+Node* parse_function_declaration(Tokenizer* tokenizer) {
+    TokenResult range_start = next_token(tokenizer);
+    ResolvedIdentifier ri = resolve_identifier(tokenizer, 1);
 
-    str identifier = gimme(tokenizer, 'i');
-    if(identifier.id < 0) return unexpected_token(*tokenizer);
+    Node* declaration = Box((Node) { &FunctionDeclaration, 0, ri.base, .function_declaration = {
+        .identifier = ri.constructed,
+        .signature = vec((Node*) 0),
+    }});
 
-    Node* declaration = Box((Node) {
-        .prototype = &FunctionDeclaration,
-        .function_declaration = {
-            .identifier = stack[len(stack) - 1].namespace
-                ? strc(stack[len(stack) - 1].namespace->namespace.identifier, constr("__"), identifier)
-                : identifier,
-            .signature = vec((Node*) 0),
+    Node* pre_body = Box((Node) { &BodyPrototype });
+
+    if(try_token(tokenizer, '<', 0)) declaration->declaration_sub_generics = 
+        collect_generics(tokenizer, &declaration->attributes, &pre_body->body.context,
+            &declaration->declaration_generics);
+
+    push(&stack, &pre_body->body.context);
+
+    expect_token(tokenizer, '(');
+    while(tokenizer->current.type != ')') {
+        Token self_pointer = { .type = 0 };
+        if(try_token(tokenizer, '&', &self_pointer) && !streq(tokenizer->current.str, constr("self"))) {
+            push(&errors, expected_keyword(next_token(tokenizer).token, "self"));
+            continue;
         }
-    });
 
-    Node pre_body = { .prototype = &BodyPrototype };
-    if(gimme(tokenizer, '<').id == '<') {
-        declaration->function_declaration.meta |= fGeneric;
+        TokenResult argument_name = expect_token(tokenizer, TokenIdentifier);
 
-        while(tokenizer->id != '>') {
-            str generic_name = gimme(tokenizer, 'i');
-            if(generic_name.id < 0) return unexpected_token(*tokenizer);
+        Node* argument_type = 0;
+        if(tokenizer->current.type != ':' && streq(argument_name.token.str, constr("self"))) {
+            if(!ri.scope->namespace || ri.scope->namespace->namespace.parent_type) {
+                push(&errors, cannot_find(argument_name.token, "parent structure"));
+                continue;
+            }
 
-            put(&pre_body.body.context.types, generic_name, Box((Node) {
-                .prototype = &GenericType,
-                .base_type = {
-                    .generic = {
-                        .generics = &declaration->function_declaration.generics,
-                        .index = len(declaration->function_declaration.generics),
-                    },
-                },
-            }));
+            argument_type = ri.scope->namespace->namespace.parent_type;
 
-            push(&declaration->function_declaration.generics, Box((Node) { .prototype = &Auto }));
-
-            if(gimme(tokenizer, ',').id < 0) break;
-        }
-        if(gimme(tokenizer, '>').id < 0) return unexpected_token(*tokenizer);
-    }
-    push(&stack, pre_body.body.context);
-
-    if(gimme(tokenizer, '(').id < 0) return unexpected_token(*tokenizer);
-    while(tokenizer->id != ')') {
-        str argument_name = gimme(tokenizer, 'i');
-        if(argument_name.id < 0 || gimme(tokenizer, ':').id < 0)
-            return unexpected_token(*tokenizer);
-        Node* argument_type = Type(tokenizer);
+            if(self_pointer.type == '&') argument_type = Box((Node) { &ModifiedType, 0,
+                stretch_token(self_pointer, argument_name.token), .modified_type = {
+                    .base = argument_type,
+                    .modifiers = vec(mPointer),
+                }
+            });
+        } else expect_token(tokenizer, ':');
+        if(!argument_type) argument_type = Type(tokenizer);
 
         push(&declaration->function_declaration.signature, argument_type);
-        push(&declaration->function_declaration.argument_names, argument_name);
+        push(&declaration->function_declaration.argument_names, argument_name.token.str);
 
-        put(&pre_body.body.context.variables, argument_name, Box((Node) {
-            .prototype = &Variable,
-            .type = argument_type,
-            .variable = {
-                .identifier = argument_name,
+        put(&pre_body->body.context.variables, argument_name.token.str, Box((Node) { &Variable, 0,
+            argument_name.token, .type = argument_type, .variable = {
+                .identifier = argument_name.token.str,
             },
         }));
 
-        if(gimme(tokenizer, ',').id < 0) break;
+        if(!try_token(tokenizer, ',', 0) && tokenizer->current.type != ')') expect_token(tokenizer, ',');
     }
-    if(gimme(tokenizer, ')').id < 0) return unexpected_token(*tokenizer);
+    TokenResult range_end = expect_token(tokenizer, ')');
+    declaration->range = stretch_token(range_start.token, range_end.token);
 
-    if(tokenizer->id == 'r') {
-        next(tokenizer);
-        declaration->function_declaration.signature[0] = Type(tokenizer);
-    } else {
-        declaration->function_declaration.signature[0] = &void_type;
-    }
-
+    declaration->function_declaration.signature[0] = try_token(tokenizer, TokenRightArrow, 0)
+        ? Type(tokenizer) : &void_type;
     pop(stack);
 
-    if(tokenizer->id == 'i' && streq(*tokenizer, constr("__external"))) {
-        next(tokenizer);
-        declaration->function_declaration.meta |= fExternal;
+    if(streq(tokenizer->current.str, constr("external"))) {
+        next_token(tokenizer);
+        declaration->attributes |= aExternal;
+        if(declaration->attributes & aGeneric) pop(generics_stack);
 
-        if(gimme(tokenizer, 'O' /* :: */).id == 'O') {
-            str c_identifier = gimme(tokenizer, 'i');
-            if(c_identifier.id < 0) return unexpected_token(*tokenizer);
-            declaration->function_declaration.identifier = c_identifier;
-        }
+        Token external_identifier;
+        if(try_token(tokenizer, TokenString, &external_identifier))
+            declaration->function_declaration.identifier = (str) {
+                external_identifier.str.len - 2, external_identifier.str.data + 1 };
+        else if(try_token(tokenizer, TokenIdentifier, &external_identifier))
+            declaration->function_declaration.identifier = external_identifier.str;
 
-        if(gimme(tokenizer, ';').id < 0) return unexpected_token(*tokenizer);
+        expect_token(tokenizer, ';');
 
-        put(&stack[len(stack) - 1].variables, identifier, Box((Node) {
-            .prototype = &Variable,
-            .type = Box((Node) {
-                .prototype = &FunctionType,
-                .base_type = {
-                    .declaration = declaration,
-                }
+        put(&ri.scope->variables, ri.base.str, Box((Node) { &Variable, 0, ri.base,
+            .type = Box((Node) { &FunctionType, 0, declaration->range,
+                .base_type = { .declaration = declaration }
             }),
-            .variable = {
-                .identifier = declaration->function_declaration.identifier,
-            }
+            .variable = { declaration->function_declaration.identifier }
         }));
 
         return Box((Node) { .prototype = &Ignore });
     }
     
-    if(gimme(tokenizer, '{').id < 0) return unexpected_token(*tokenizer);
-    declaration->function_declaration.body = Body(tokenizer, '}', 0, Box(pre_body));
+    expect_token(tokenizer, '{');
+    declaration->function_declaration.body = Body(tokenizer, '}', 0, pre_body);
+    if(declaration->attributes & aGeneric) pop(generics_stack);
 
-    if(!(declaration->function_declaration.meta & fGeneric))
-        push(&function_declarations->body.children, declaration); 
-
-    put(&stack[len(stack) - 1].variables, identifier, Box((Node) {
-        .prototype = &Variable,
-        .type = Box((Node) {
-            .prototype = &FunctionType,
-            .base_type = {
-                .declaration = declaration,
-            }
-        }),
-        .variable = {
-            .meta = stack[len(stack) - 1].namespace ? tHidden : 0,
-            .identifier = declaration->function_declaration.identifier,
-        },
+    put(&ri.scope->variables, ri.base.str, Box((Node) { &Variable, 0, ri.base,
+        .type = Box((Node) { &FunctionType, .base_type = { .declaration = declaration } }),
+        .variable = { ri.constructed },
     }));
 
-    return Box((Node) { .prototype = &Ignore });
+    if(!(declaration->attributes & aGeneric)) {
+        push(&hoist_section->body.children, declaration);
+        return declaration;
+    } else return Box((Node) { &Ignore });
 }
 
 #endif

@@ -2,20 +2,18 @@
 #define TYPE_C
 
 #include "../basic.c"
+#include "../symbol/identifier.c"
 
-Node* parse_type_declaration(str* tokenizer) {
-    next(tokenizer);
-
-    str identifier = gimme(tokenizer, 'i');
-    if(identifier.id < 0) return unexpected_token(*tokenizer);
+Node* parse_type_declaration(Tokenizer* tokenizer) {
+    TokenResult range_start = next_token(tokenizer);
+    ResolvedIdentifier ri = resolve_identifier(tokenizer, 1);
     
-    if(gimme(tokenizer, '=').id < 0) return unexpected_token(*tokenizer);
+    expect_token(tokenizer, '=');
     Node* type = Type(tokenizer);
-    if(type->prototype == &Error) return type;
 
-    if(gimme(tokenizer, ';').id < 0) return unexpected_token(*tokenizer);
-    put(&stack[len(stack) - 1].types, identifier, type);
-    return Box((Node) { .prototype = &Ignore });
+    expect_token(tokenizer, ';');
+    put(&stack[len(stack) - 1]->types, ri.base.str, type);
+    return Box((Node) { &Ignore });
 }
 
 #endif

@@ -1,0 +1,48 @@
+type int    = external numeric int;
+type uint   = external numeric "unsigned int";
+type usize  = external numeric size_t;
+type isize  = external numeric ssize_t;
+type char   = external numeric char;
+type uchar  = external numeric "unsigned char";
+
+type void   = external void;
+type bool   = external numeric bool;
+
+type i32    = external numeric int32_t;
+type u32    = external numeric uint32_t;
+
+namespace c {
+    namespace lib {
+        fn malloc<T>(n: int) -> &T          external malloc;
+        fn realloc<T>(x: &T, n: int) -> &T  external realloc;
+        fn free<T>(x: &T)                   external free;
+    }
+
+    namespace io {
+        type File       = external FILE;
+        const stdout    = external<&File> stdout;
+
+        fn fwrite<T>(x: &T, s: usize, n: usize, f: &File) -> usize  external fwrite;
+    }
+
+    namespace string {
+        fn strncmp(s1: &char, s2: &char, n: usize) -> int   external strncmp;
+    }
+}
+
+struct str {
+    data: &char,
+    size: usize,
+}
+
+namespace io {
+    type File = c::io::File;
+
+    fn write(file: &File, x: str) {
+        c::io::fwrite(x.data, sizeof<char>, x.size, file);
+    }
+}
+
+fn print(x: str) {
+    io::write(c::io::stdout, x);
+}

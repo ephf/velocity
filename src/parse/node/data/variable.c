@@ -3,19 +3,20 @@
 
 #include "../basic.c"
 #include "../../include.h"
+#include "../symbol/identifier.c"
 
 void Variable(Node node, FILE* file) {
     fprintf(file, "%.*s",
         node.variable.identifier.len, node.variable.identifier.data);
 }
 
-Node* find_variable(str token) {
+Node* find_variable(str identifier) {
     for(int i = len(stack); i--; ) {
-        Node** variable = get(stack[i].variables, token);
-        if(variable && !((*variable)->prototype == &Variable && (*variable)->variable.meta & vHidden))
+        Node** variable = get(stack[i]->variables, identifier);
+        if(variable && !((*variable)->prototype == &Variable && (*variable)->attributes & aHidden))
             return *variable;
     }
-    return cannot_find(token, "variable");
+    return 0;
 }
 
 void VariableDeclaration(Node node, FILE* file) {
@@ -32,64 +33,37 @@ void VariableDeclaration(Node node, FILE* file) {
     fprintf(file, ";\n");
 }
 
-Node* parse_variable_declaration(str* tokenizer) {
-    next(tokenizer);
+void Namespace(Node, FILE*);
+
+Node* parse_variable_declaration(Tokenizer* tokenizer) {
+    int attributes = 0;
+    TokenResult declarator = next_token(tokenizer);
+    if(streq(declarator.token.str, constr("const"))) attributes |= aConst;
     
-    str identifier = gimme(tokenizer, 'i');
-    if(identifier.id < 0) return unexpected_token(*tokenizer);
+    ResolvedIdentifier ri = resolve_identifier(tokenizer, 1);
+    Node* type = try_token(tokenizer, ':', 0)
+        ? Type(tokenizer) : Box((Node) { &Auto });
 
-    Node* type = gimme(tokenizer, ':').id == ':'
-        ? Type(tokenizer) : Box((Node) { .prototype = &Auto });
+    Node* value = 0;
+    if(try_token(tokenizer, '=', 0)) {
+        value = Expression(tokenizer, 100);
 
-    switch(tokenizer->id) {
-        case '=': {
-            next(tokenizer);
-
-            Node* value = Expression(tokenizer, 100);
-            if(gimme(tokenizer, ';').id < 0) return unexpected_token(*tokenizer);
-
-            type_match(&type, value->type);
-
-            put(&stack[len(stack) - 1].variables, identifier, Box((Node) {
-                .prototype = &Variable,
-                .type = type,
-                .variable = {
-                    .identifier = identifier,
-                },
-            }));
-
-            return Box((Node) {
-                .prototype = &VariableDeclaration,
-                .variable_declaration = {
-                    .type = type,
-                    .identifier = identifier,
-                    .value = value,
-                },
-            });
-        }
-
-        case ';': {
-            next(tokenizer);
-
-            put(&stack[len(stack) - 1].variables, identifier, Box((Node) {
-                .prototype = &Variable,
-                .type = type,
-                .variable = {
-                    .identifier = identifier,
-                },
-            }));
-
-            return Box((Node) {
-                .prototype = &VariableDeclaration,
-                .variable_declaration = {
-                    .type = type,
-                    .identifier = identifier,
-                },
-            });
-        }
-
-        default: return unexpected_token(*tokenizer);
+        if(!type_match(&type, value->type)) push(&errors, type_mismatch(
+            stretch_token(declarator.token, value->range), type, value->type));
     }
+    expect_token(tokenizer, ';');
+
+    put(&stack[len(stack) - 1]->variables, ri.base.str, attributes & aConst
+        ? value : Box((Node) { &Variable, attributes, ri.base,
+            .type = type,
+            .variable = { ri.constructed },
+        })); 
+
+    return attributes & aConst
+        ? Box((Node) { &Ignore })
+        : Box((Node) { &VariableDeclaration, attributes, stretch_token(declarator.token, ri.base),
+            .variable_declaration = { type, ri.constructed, value }
+        });
 }
 
 #endif

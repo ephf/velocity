@@ -1,7 +1,6 @@
 #ifndef BASIC_C
 #define BASIC_C
 
-#include "error.c"
 #include "generics.c"
 #include "../node.c"
 
@@ -10,35 +9,33 @@ void AutoError(Node node) {
 }
 
 void Auto(Node node, FILE* file) {
-    if(node.type_meta & tIsNumeric) {
-        fprintf(file, "int");
-        return;
-    }
-
-    Error((Node) {
-        .error = {
-            .perror = &AutoError,
-        }
-    }, file);
-}
-
-char (*indent)[4] = 0;
-int initial_indent = 0;
-
-void BodyPrototype(Node node, FILE* file) {
-    if(initial_indent++) push(&indent, "    ");
-    for(int i = 0; i < len(node.body.children); i++) {
-        fprintf(file, "%.*s", (int) len(indent) * 4, (char*)(void*) indent);
-        Node* child = node.body.children[i];
-        child->prototype(*child, file);
-    }
-    if(--initial_indent) pop(indent);
+    fprintf(file, "int");
 }
 
 void Ignore(Node node, FILE* file) {}
 
+char (*indent)[4] = 0;
+int indent_depth = 0;
+
+void BodyPrototype(Node node, FILE* file) {
+    if(indent_depth++) push(&indent, "    ");
+    for(int i = 0; i < len(node.body.children); i++) {
+        Node* child = node.body.children[i];
+        if(child->prototype != &Ignore) fprintf(file, "%.*s", (int) len(indent) * 4, (char*)(void*) indent);
+        child->prototype(*child, file);
+    }
+    if(--indent_depth) pop(indent);
+}
+
 void CType(Node node, FILE* file) {
     fprintf(file, "%.*s", node.base_type.c_type.len, node.base_type.c_type.data);
 }
+
+Node void_type = {
+    .prototype = &CType,
+    .base_type = {
+        .c_type = constr("void"),
+    },
+};
 
 #endif

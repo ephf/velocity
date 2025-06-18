@@ -8,21 +8,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 typedef struct {
-    int id, len;
+    int len;
     char* data;
 } str;
 
-#define constr(x) ((str) { 0, sizeof(x) - 1, (char*) x })
-int streq(str a, str b) {
+#define constr(x) ((str) { sizeof(x) - 1, (char*) x })
+bool streq(str a, str b) {
     return a.len == b.len && !strncmp(a.data, b.data, a.len);
 }
 #define strc(x...) ({ \
     str _s[] = { x }; \
     int _l = 0; \
     for(int i = 0; i < sizeof(_s) / sizeof(*_s); i++) _l += _s[i].len; \
-    str _c = { 0, _l, malloc(_l) }; \
+    str _c = { _l, malloc(_l) }; \
     for(int i = 0, j = 0; i < sizeof(_s) / sizeof(*_s); i++) { \
         memcpy(_c.data + j, _s[i].data, _s[i].len); \
         j += _s[i].len; \
@@ -86,7 +87,7 @@ void* _get(int** m, str k, int n) {
 char* readfile(char* n) {
     FILE* f = fopen(n, "r");
     fseek(f, 0, SEEK_END);
-    char (*buf)[ftell(f)] = malloc(sizeof(*buf));
+    char (*buf)[ftell(f)] = malloc(sizeof(*buf) + 1);
     rewind(f);
     (*buf)[fread(buf, 1, sizeof(*buf), f)] = 0;
     return (void*) buf;
